@@ -1,1 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>swap — mejor ruta, comisión visible</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#12151A; --panel:#1B1F26; --panel-2:#20252D; --text:#EDEEF0; --muted:#8A8F98;
+    --accent:#5FBF95; --accent-dim:#3E7D63; --warn:#E8735F; --border:#2A2F38;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'IBM Plex Sans', system-ui, sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100vh; padding:48px 20px;
+  }
+  .brand{width:100%; max-width:440px; display:flex; justify-content:space-between; align-items:center; margin-bottom:28px;}
+  .brand .name{font-size:15px; font-weight:600; letter-spacing:0.01em;}
+  .brand .name span{color:var(--accent);}
+  #walletBtn{
+    background:var(--panel); border:1px solid var(--border); color:var(--text);
+    padding:8px 14px; border-radius:8px; font-size:13px; cursor:pointer;
+    font-family:'IBM Plex Mono', monospace;
+  }
+  #walletBtn:hover{border-color:var(--accent-dim);}
+  .card{width:100%; max-width:440px; background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:6px;}
+  .field{background:var(--panel-2); border-radius:12px; padding:16px 18px; position:relative;}
+  .field + .field{margin-top:4px;}
+  .field label{font-size:12px; color:var(--muted);}
+  .field-row{display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:10px;}
+  .amount-input{
+    background:none; border:none; outline:none; color:var(--text);
+    font-family:'IBM Plex Mono', monospace; font-size:28px; width:100%;
+    font-variant-numeric: tabular-nums;
+  }
+  .amount-input::placeholder{color:#4A5058;}
+  select.token-select{
+    background:var(--panel); border:1px solid var(--border); border-radius:999px;
+    padding:8px 12px; font-size:13px; color:var(--text); white-space:nowrap; cursor:pointer;
+    -webkit-appearance:none; appearance:none;
+  }
+  .swap-toggle{display:flex; justify-content:center; margin:2px 0; position:relative; height:0;}
+  .swap-toggle button{
+    position:relative; top:-12px; width:34px; height:34px; border-radius:10px;
+    background:var(--panel); border:1px solid var(--border); color:var(--muted);
+    cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px;
+  }
+  .swap-toggle button:hover{color:var(--accent); border-color:var(--accent-dim);}
+  .receipt{padding:14px 18px 4px; font-size:12.5px; color:var(--muted); display:none;}
+  .receipt.show{display:block;}
+  .receipt .line{display:flex; justify-content:space-between; padding:5px 0;}
+  .receipt .line span:last-child{color:var(--text); font-family:'IBM Plex Mono', monospace;}
+  .cta{
+    width:100%; margin-top:4px; padding:16px; border:none; border-radius:12px;
+    background:var(--accent); color:#0B1310; font-size:15px; font-weight:600; cursor:pointer;
+    font-family:'IBM Plex Sans', sans-serif;
+  }
+  .cta:disabled{opacity:.55; cursor:default;}
+  .cta.pending{background:var(--panel-2); color:var(--muted); border:1px solid var(--border);}
+  .cta.error{background:var(--warn); color:#2A0F0A;}
+  .status{max-width:440px; width:100%; margin-top:16px; font-size:13px; color:var(--muted); text-align:center; line-height:1.5;}
+  .advanced{max-width:440px; width:100%; margin-top:10px;}
+  .advanced summary{font-size:12.5px; color:var(--muted); cursor:pointer;}
+  .advanced-body{display:flex; gap:8px; margin-top:10px;}
+  .advanced-body input{
+    flex:1; background:var(--panel-2); border:1px solid var(--border); border-radius:8px;
+    color:var(--text); padding:8px 10px; font-size:12px; font-family:'IBM Plex Mono', monospace;
+  }
+</style>
+</head>
+<body>
 
+<div class="brand">
+  <div class="name">swap<span>.</span></div>
+  <button id="walletBtn" onclick="connectWallet()">Conectar wallet</button>
+</div>
+
+<div class="card">
+  <div class="field">
+    <label>Envías</label>
+    <div class="field-row">
+      <input id="fromAmount" class="amount-input" type="text" inputmode="decimal" placeholder="0.0" oninput="resetQuote()">
+      <select id="fromToken" class="token-select" onchange="resetQuote()"></select>
+    </div>
+  </div>
+
+  <div class="swap-toggle"><button onclick="flipDirection()" title="Invertir">⇅</button></div>
+
+  <div class="field">
+    <label>Recibes (estimado)</label>
+    <div class="field-row">
+      <div id="toAmount" class="amount-input" style="color:var(--muted);">—</div>
+      <select id="toToken" class="token-select" onchange="resetQuote()"></select>
+    </div>
+  </div>
+
+  <div id="receipt" class="receipt">
+    <div class="line"><span>Ruta</span><span id="rProvider">—</span></div>
+    <div class="line"><span>Gas estimado</span><span id="rGas">—</span></div>
+    <div class="line"><span>Comisión de red Algorand</span><span id="rFee">0,01 USDC</span></div>
+  </div>
+
+  <button id="cta" class="cta" onclick="onCtaClick()">Obtener cotización</button>
+</div>
+
+<details class="advanced">
+  <summary>Token personalizado (para algo que no esté en la lista)</summary>
+  <div class="advanced-body">
+    <input id="customFrom" placeholder="Dirección del token origen (0x...)">
+    <input id="customTo" placeholder="Dirección del token destino (0x...)">
+  </div>
+</details>
+
+<div id="status" class="status"></div>
+
+<script>
+const BACKEND_URL = 'https://algorand-swap-x402.onrender.com';
+
+const CHAINS = {
+  1:     { name: 'Ethereum', native: 'ETH'   },
+  137:   { name: 'Polygon',  native: 'MATIC' },
+  42161: { name: 'Arbitrum', native: 'ETH'   },
+  8453:  { name: 'Base',     native: 'ETH'   },
+  10:    { name: 'Optimism', native: 'ETH'   },
+  56:    { name: 'BSC',      native: 'BNB'   },
+};
+const NATIVE = '0x0000000000000000000000000000000000000000';
+const PAIRS = Object.entries(CHAINS).map(([id, c]) => ({ chainId: Number(id), label: `${c.native} · ${c.name}` }));
+
+let signer = null, userAddress = null, lastQuote = null, stage = 'idle';
+
+function fillSelect(sel) { sel.innerHTML = PAIRS.map(p => `<option value="${p.chainId}">${p.label}</option>`).join(''); }
+fillSelect(document.getElementById('fromToken'));
+fillSelect(document.getElementById('toToken'));
+document.getElementById('toToken').selectedIndex = 1;
+
+function currentPair(selectId) {
+  const chainId = Number(document.getElementById(selectId).value);
+  return { chainId, ...CHAINS[chainId] };
+}
+
+function flipDirection() {
+  const a = document.getElementById('fromToken').value, b = document.getElementById('toToken').value;
+  document.getElementById('fromToken').value = b;
+  document.getElementById('toToken').value = a;
+  resetQuote();
+}
+
+function resetQuote() {
+  lastQuote = null; stage = 'idle';
+  document.getElementById('toAmount').textContent = '—';
+  document.getElementById('toAmount').style.color = 'var(--muted)';
+  document.getElementById('receipt').classList.remove('show');
+  const cta = document.getElementById('cta');
+  cta.textContent = 'Obtener cotización'; cta.className = 'cta'; cta.disabled = false;
+  setStatus('');
+}
+
+function setStatus(msg, isError) {
+  const el = document.getElementById('status');
+  el.textContent = msg || '';
+  el.style.color = isError ? 'var(--warn)' : 'var(--muted)';
+}
+
+async function connectWallet() {
+  if (!window.ethereum) { setStatus('No encuentro una wallet EVM en el navegador (instala MetaMask u otra).', true); return; }
+  const provider = new ethers.BrowserProvider(window.ethereum);
+  await provider.send('eth_requestAccounts', []);
+  signer = await provider.getSigner();
+  userAddress = await signer.getAddress();
+  document.getElementById('walletBtn').textContent = userAddress.slice(0,6) + '…' + userAddress.slice(-4);
+}
+
+function onCtaClick() {
+  if (stage === 'idle') return getQuote();
+  if (stage === 'quoted') return executeSwap();
+}
+
+async function getQuote() {
+  const amountStr = document.getElementById('fromAmount').value;
+  if (!amountStr || Number(amountStr) <= 0) { setStatus('Escribe una cantidad primero.', true); return; }
+  if (!signer) { await connectWallet(); if (!signer) return; }
+
+  const from = currentPair('fromToken'), to = currentPair('toToken');
+  const customFrom = document.getElementById('customFrom').value.trim();
+  const customTo = document.getElementById('customTo').value.trim();
+  const fromTokenAddr = customFrom || NATIVE, toTokenAddr = customTo || NATIVE;
+  const fromDecimals = customFrom ? await erc20Decimals(customFrom) : 18;
+  const toDecimals = customTo ? await erc20Decimals(customTo) : 18;
+  const fromAmount = ethers.parseUnits(amountStr, fromDecimals).toString();
+
+  const cta = document.getElementById('cta');
+  cta.disabled = true; cta.textContent = 'Pidiendo cotización…'; cta.className = 'cta pending';
+
+  const params = new URLSearchParams({
+    from_chain: from.chainId, from_token: fromTokenAddr,
+    to_chain: to.chainId, to_token: toTokenAddr,
+    from_amount: fromAmount, from_address: userAddress,
+  });
+
+  try {
+    let resp = await fetch(`${BACKEND_URL}/quote?${params}`);
+    if (resp.status !== 402) throw new Error(`Respuesta inesperada del servidor (${resp.status})`);
+    const required = JSON.parse(atob(resp.headers.get('PAYMENT-REQUIRED')));
+
+    cta.textContent = 'Pagando comisión x402…';
+    const paymentHeader = await payAlgorandFee(required);
+
+    resp = await fetch(`${BACKEND_URL}/quote?${params}`, { headers: { 'PAYMENT-SIGNATURE': paymentHeader } });
+    if (!resp.ok) throw new Error(`El servidor no confirmó el pago (${resp.status})`);
+    lastQuote = await resp.json();
+    lastQuote._toDecimals = toDecimals;
+    lastQuote._fromAmount = fromAmount;
+
+    renderQuote(lastQuote);
+    stage = 'quoted';
+    cta.disabled = false; cta.textContent = 'Confirmar y enviar swap'; cta.className = 'cta';
+    setStatus('');
+  } catch (err) {
+    console.error(err);
+    setStatus(err.message || 'Algo falló pidiendo la cotización.', true);
+    cta.disabled = false; cta.textContent = 'Reintentar'; cta.className = 'cta error';
+  }
+}
+
+function renderQuote(q) {
+  const toAmountHuman = ethers.formatUnits(q.to_amount || '0', q._toDecimals);
+  document.getElementById('toAmount').textContent = Number(toAmountHuman).toLocaleString('es-ES', { maximumFractionDigits: 6 });
+  document.getElementById('toAmount').style.color = 'var(--text)';
+  document.getElementById('rProvider').textContent = q.provider || '—';
+  document.getElementById('rGas').textContent = q.estimated_gas_costs_usd != null ? `$${q.estimated_gas_costs_usd}` : '—';
+  document.getElementById('receipt').classList.add('show');
+}
+
+async function executeSwap() {
+  const cta = document.getElementById('cta');
+  cta.disabled = true; cta.textContent = 'Enviando swap…'; cta.className = 'cta pending';
+  try {
+    const tx = lastQuote.transaction_request;
+    if (!tx) throw new Error('Esta ruta no trae una transacción ejecutable.');
+
+    const customFrom = document.getElementById('customFrom').value.trim();
+    if (customFrom) {
+      await ensureAllowance(customFrom, lastQuote.approval_address || tx.to, lastQuote._fromAmount);
+    }
+
+    const sentTx = await signer.sendTransaction({ to: tx.to, data: tx.data, value: tx.value, gasLimit: tx.gasLimit });
+    setStatus(`Enviada: ${sentTx.hash}. Esperando confirmación…`);
+    await sentTx.wait();
+    cta.textContent = 'Swap enviado ✓'; cta.className = 'cta';
+    setStatus(`Confirmado. Hash: ${sentTx.hash}`);
+    stage = 'done';
+  } catch (err) {
+    console.error(err);
+    setStatus(err.message || 'El swap no se pudo enviar.', true);
+    cta.disabled = false; cta.textContent = 'Reintentar swap'; cta.className = 'cta error';
+  }
+}
+
+async function erc20Decimals(address) {
+  const provider = new ethers.BrowserProvider(window.ethereum);
+  const c = new ethers.Contract(address, ['function decimals() view returns (uint8)'], provider);
+  return await c.decimals();
+}
+
+async function ensureAllowance(tokenAddress, spender, neededAmountStr) {
+  const c = new ethers.Contract(tokenAddress, [
+    'function allowance(address,address) view returns (uint256)',
+    'function approve(address,uint256) returns (bool)',
+  ], signer);
+  const needed = BigInt(neededAmountStr);
+  const current = await c.allowance(userAddress, spender);
+  if (current >= needed) return;
+  setStatus('Aprobando el gasto del token (una transacción extra, la exige cualquier token ERC20)…');
+  const tx = await c.approve(spender, needed);
+  await tx.wait();
+}
+
+// -----------------------------------------------------------------------
+// PENDIENTE: aquí va tu integración real de Pera Wallet para pagar la
+// comisión x402. Ya la tienes funcionando en el checkout de "Trading News"
+// -- pásamela y la conecto aquí en vez de inventar una nueva.
+async function payAlgorandFee(requirements) {
+  throw new Error('Falta conectar Pera Wallet para pagar la comisión x402 (checkout de Trading News).');
+}
+</script>
+</body>
+</html>
