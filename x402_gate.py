@@ -176,7 +176,7 @@ class PaymentGate:
         return PaymentRequirements(
             scheme='exact', network=self.cfg.chain, asset=self.cfg.asset,
             amount=str(self.cfg.price), pay_to=self.cfg.pay_to, max_timeout_seconds=120,
-            extra={'feePayer': self.cfg.fee_payer},
+            extra={'feePayer': self.cfg.fee_payer, 'tag': 'x402-global-challenge'},
         )
 
     def quote(self, resource_path):
