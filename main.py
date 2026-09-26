@@ -5,6 +5,7 @@ from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from lifi_client import get_best_route, summarize_route
 from x402_gate import PaymentGate, SwapConfig
@@ -13,12 +14,30 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['*'],
-    allow_methods=['GET'],
-    allow_headers=['PAYMENT-SIGNATURE'],
+    allow_methods=['GET', 'POST'],
+    allow_headers=['PAYMENT-SIGNATURE', 'Content-Type'],
     expose_headers=['PAYMENT-REQUIRED', 'PAYMENT-RESPONSE'],
 )
 cfg = SwapConfig()
 gate = PaymentGate(cfg)
+
+
+class PrepareRequest(BaseModel):
+    address: str
+
+
+@app.get('/config')
+async def public_config():
+    """Config pública para que la web sepa contra qué validar (red, activo, destinatario)."""
+    return {'network': cfg.chain, 'asset': cfg.asset, 'pay_to': cfg.pay_to, 'price_atomic': cfg.price}
+
+
+@app.post('/prepare-payment')
+async def prepare_payment(body: PrepareRequest):
+    try:
+        return await run_in_threadpool(gate.prepare, body.address, '/quote')
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from None
 
 
 @app.on_event('startup')
