@@ -26,8 +26,20 @@ from x402.mechanisms.avm.constants import (
     USDC_MAINNET_ASA_ID,
     USDC_TESTNET_ASA_ID,
 )
+from x402.extensions.bazaar import declare_discovery_extension
 from x402.mechanisms.avm.exact import ExactAvmScheme
 from x402.schemas import PaymentPayload, PaymentRequired, PaymentRequirements, ResourceInfo
+
+# Etiqueta de descubrimiento para el catálogo Bazaar del concurso (adaptado de
+# Trading News). Sin esto, el facilitador liquida los pagos igual mismo pero
+# no aparecen catalogados bajo X402-GLOBAL-CHALLENGE.
+BAZAAR_EXTENSIONS = declare_discovery_extension(input={}, input_schema={'type': 'object', 'properties': {}})
+BAZAAR_EXTENSIONS['bazaar']['info']['input']['method'] = 'GET'
+BAZAAR_EXTENSIONS['bazaar']['info'].update({
+    'name': 'ChepeastSwap',
+    'tags': ['x402-global-challenge', 'swap', 'crypto', 'defi'],
+    'description': 'Best multi-chain swap route via LI.FI, with a visible fee',
+})
 
 
 def canonical(obj):
@@ -175,6 +187,7 @@ class PaymentGate:
                 description='Mejor ruta de swap multi-cadena (LI.FI)',
                 mime_type='application/json',
             ),
+            extensions=BAZAAR_EXTENSIONS,
         )
 
     def verify_and_settle(self, resource_path, payment_header):
@@ -252,6 +265,7 @@ class PaymentGate:
                     'mimeType': 'application/json',
                 },
                 'accepts': [requirement.model_dump(by_alias=True, exclude_none=True)],
+                'extensions': BAZAAR_EXTENSIONS,
             },
             'unsigned_transactions': payload['paymentGroup'],
             'sign_indexes': signer.indexes,

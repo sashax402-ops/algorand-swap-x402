@@ -41,6 +41,15 @@ async def price(chain: str = Query(...), token: str = Query(...)):
     return {'price_usd': data.get('priceUSD')}
 
 
+@app.get('/.well-known/x402.json')
+async def manifest():
+    """Manifiesto público que el facilitador usa para catalogar el endpoint
+    bajo x402-global-challenge (adaptado de Trading News)."""
+    challenge = gate.quote('/execute').model_dump(by_alias=True, exclude_none=True)
+    challenge['resources'] = [cfg.endpoint + '/execute']
+    return challenge
+
+
 @app.get('/config')
 async def public_config():
     """Config pública para que la web sepa contra qué validar (red, activo, destinatario)."""
