@@ -27,6 +27,20 @@ class PrepareRequest(BaseModel):
     address: str
 
 
+@app.get('/price')
+async def price(chain: str = Query(...), token: str = Query(...)):
+    """Precio en USD de un token vía LI.FI. Gratis e informativo -- para el
+    conversor $ / token de la web, no afecta al pago ni a la ruta."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get('https://li.quest/v1/token', params={'chain': chain, 'token': token})
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail='No se pudo obtener el precio') from None
+    return {'price_usd': data.get('priceUSD')}
+
+
 @app.get('/config')
 async def public_config():
     """Config pública para que la web sepa contra qué validar (red, activo, destinatario)."""
