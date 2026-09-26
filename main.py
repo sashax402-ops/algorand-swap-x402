@@ -35,7 +35,7 @@ async def public_config():
 @app.post('/prepare-payment')
 async def prepare_payment(body: PrepareRequest):
     try:
-        return await run_in_threadpool(gate.prepare, body.address, '/quote')
+        return await run_in_threadpool(gate.prepare, body.address, '/execute')
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from None
 
@@ -46,7 +46,7 @@ def check_sponsor():
 
 
 @app.get('/quote')
-async def quote(
+async def quote_preview(
     from_chain: str = Query(..., description="Chain ID origen (ej. 1=Ethereum) o 'BTC'"),
     from_token: str = Query(..., description="Símbolo, dirección del token origen, o 'bitcoin'"),
     to_chain: str = Query(..., description="Chain ID destino o 'BTC'"),
@@ -54,10 +54,29 @@ async def quote(
     from_amount: str = Query(..., description='Cantidad en unidad mínima (wei/satoshis)'),
     from_address: str = Query(..., description='Wallet de origen'),
     to_address: str | None = Query(default=None, description='Wallet de destino (por defecto, from_address)'),
+):
+    """Vista previa GRATIS: solo estimación, sin datos ejecutables. Sirve para
+    actualizar 'Recibes' en vivo mientras el usuario elige, sin cobrar nada."""
+    raw_quote = await get_best_route(from_chain, from_token, to_chain, to_token, from_amount, from_address, to_address)
+    full = summarize_route(raw_quote)
+    return {k: v for k, v in full.items() if k not in ('transaction_request', 'approval_address')}
+
+
+@app.get('/execute')
+async def execute(
+    from_chain: str = Query(...),
+    from_token: str = Query(...),
+    to_chain: str = Query(...),
+    to_token: str = Query(...),
+    from_amount: str = Query(...),
+    from_address: str = Query(...),
+    to_address: str | None = Query(default=None),
     payment_signature: str | None = Header(default=None, alias='PAYMENT-SIGNATURE'),
 ):
+    """Igual que /quote, pero cobra la comisión x402 y devuelve la transacción
+    ejecutable (transaction_request). Aquí es donde se paga, no en /quote."""
     try:
-        status, headers = await run_in_threadpool(gate.verify_and_settle, '/quote', payment_signature)
+        status, headers = await run_in_threadpool(gate.verify_and_settle, '/execute', payment_signature)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from None
 
