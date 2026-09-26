@@ -1,6 +1,7 @@
 """crypto-swap: comparador de rutas de swap multi-chain, cobrado por
 consulta vía x402 en Algorand (facilitator.goplausible.xyz).
 """
+import httpx
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,6 +46,21 @@ def check_sponsor():
     gate.check_fee_sponsor()
 
 
+async def fetch_route(*args):
+    """Convierte cualquier fallo de LI.FI en un HTTPException controlado.
+
+    Sin esto, un error de httpx sin capturar se sale del control de FastAPI
+    y la respuesta de emergencia resultante NO lleva las cabeceras de CORS
+    -- el navegador lo enseña como un fallo de CORS aunque el problema real
+    sea otro (aquí: una dirección placeholder que LI.FI rechaza)."""
+    try:
+        return await get_best_route(*args)
+    except httpx.HTTPStatusError as error:
+        raise HTTPException(status_code=502, detail=f'LI.FI no pudo calcular la ruta: {error.response.text[:300]}') from None
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail='No se pudo contactar con LI.FI') from None
+
+
 @app.get('/quote')
 async def quote_preview(
     from_chain: str = Query(..., description="Chain ID origen (ej. 1=Ethereum) o 'BTC'"),
@@ -57,7 +73,7 @@ async def quote_preview(
 ):
     """Vista previa GRATIS: solo estimación, sin datos ejecutables. Sirve para
     actualizar 'Recibes' en vivo mientras el usuario elige, sin cobrar nada."""
-    raw_quote = await get_best_route(from_chain, from_token, to_chain, to_token, from_amount, from_address, to_address)
+    raw_quote = await fetch_route(from_chain, from_token, to_chain, to_token, from_amount, from_address, to_address)
     full = summarize_route(raw_quote)
     return {k: v for k, v in full.items() if k not in ('transaction_request', 'approval_address')}
 
@@ -84,5 +100,5 @@ async def execute(
         detail = 'payment_required' if status == 402 else 'settlement_pending'
         raise HTTPException(status_code=status, detail=detail, headers=headers)
 
-    raw_quote = await get_best_route(from_chain, from_token, to_chain, to_token, from_amount, from_address, to_address)
+    raw_quote = await fetch_route(from_chain, from_token, to_chain, to_token, from_amount, from_address, to_address)
     return JSONResponse(summarize_route(raw_quote), headers=headers)
