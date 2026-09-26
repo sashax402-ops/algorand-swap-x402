@@ -178,9 +178,11 @@ class PaymentGate:
         )
 
     def verify_and_settle(self, resource_path, payment_header):
-        """Devuelve (status_code, response_headers). status_code 200 = pago liquidado."""
+        """Devuelve (status_code, response_headers, detail). status_code 200 = pago liquidado.
+        detail trae el motivo real que da el facilitador cuando algo no cuadra, en vez de
+        un 402/202 genérico sin explicación."""
         if not payment_header:
-            return 402, {'PAYMENT-REQUIRED': b64(self.quote(resource_path))}
+            return 402, {'PAYMENT-REQUIRED': b64(self.quote(resource_path))}, None
 
         requirement = self.requirement(resource_path)
         try:
@@ -195,13 +197,14 @@ class PaymentGate:
 
         verification = self.facilitator.verify(payload, requirement)
         if not verification.is_valid:
-            return 402, {'PAYMENT-REQUIRED': b64(self.quote(resource_path))}
+            reason = verification.invalid_message or verification.invalid_reason
+            return 402, {'PAYMENT-REQUIRED': b64(self.quote(resource_path))}, reason
 
         settle = self.facilitator.settle(payload, requirement)
         if not settle.success:
-            return 202, {}
+            return 202, {}, (settle.error_message or settle.error_reason)
 
-        return 200, {'PAYMENT-RESPONSE': b64(settle)}
+        return 200, {'PAYMENT-RESPONSE': b64(settle)}, None
 
     def _suggested_params(self):
         """Parámetros de red cacheados 15s, con comisión acotada (adaptado de checkout.py)."""

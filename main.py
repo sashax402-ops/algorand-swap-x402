@@ -92,13 +92,13 @@ async def execute(
     """Igual que /quote, pero cobra la comisión x402 y devuelve la transacción
     ejecutable (transaction_request). Aquí es donde se paga, no en /quote."""
     try:
-        status, headers = await run_in_threadpool(gate.verify_and_settle, '/execute', payment_signature)
+        status, headers, detail = await run_in_threadpool(gate.verify_and_settle, '/execute', payment_signature)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from None
 
     if status != 200:
-        detail = 'payment_required' if status == 402 else 'settlement_pending'
-        raise HTTPException(status_code=status, detail=detail, headers=headers)
+        fallback = 'payment_required' if status == 402 else 'settlement_pending'
+        raise HTTPException(status_code=status, detail=detail or fallback, headers=headers)
 
     raw_quote = await fetch_route(from_chain, from_token, to_chain, to_token, from_amount, from_address, to_address)
     return JSONResponse(summarize_route(raw_quote), headers=headers)
