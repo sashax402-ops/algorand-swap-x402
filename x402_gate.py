@@ -30,16 +30,27 @@ from x402.extensions.bazaar import declare_discovery_extension
 from x402.mechanisms.avm.exact import ExactAvmScheme
 from x402.schemas import PaymentPayload, PaymentRequired, PaymentRequirements, ResourceInfo
 
-# Etiqueta de descubrimiento para el catálogo Bazaar del concurso (adaptado de
-# Trading News). Sin esto, el facilitador liquida los pagos igual mismo pero
-# no aparecen catalogados bajo X402-GLOBAL-CHALLENGE.
+# Metadatos de descubrimiento para Bazaar. La atribución al concurso se
+# declara por separado en requirement().extra.tag.
 BAZAAR_EXTENSIONS = declare_discovery_extension(input={}, input_schema={'type': 'object', 'properties': {}})
 BAZAAR_EXTENSIONS['bazaar']['info']['input']['method'] = 'GET'
+BAZAAR_EXTENSIONS['bazaar']['schema']['properties']['input']['properties']['method'] = {'type': 'string', 'const': 'GET'}
+BAZAAR_EXTENSIONS['bazaar']['schema']['properties']['input']['required'].append('method')
 BAZAAR_EXTENSIONS['bazaar']['info'].update({
     'name': 'ChepeastSwap',
     'tags': ['x402-global-challenge', 'swap', 'crypto', 'defi'],
     'description': 'Best multi-chain swap route via LI.FI, with a visible fee',
 })
+# Identidad explícita del comercio: no depende del HTML del dominio de la API.
+BAZAAR_EXTENSIONS['x402-merchant'] = {
+    'info': {'name': 'ChepeastSwap'},
+    'schema': {
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        'type': 'object',
+        'required': ['name'],
+        'properties': {'name': {'type': 'string'}},
+    },
+}
 
 
 def canonical(obj):
@@ -207,6 +218,11 @@ class PaymentGate:
             validate_payment_payload(payload, self.cfg)
         except Exception:
             raise ValueError('Payment differs from the request or is not allowed') from None
+
+        # El servidor conoce la ruta GET /execute. Adjunta sus metadatos incluso
+        # si un cliente omite las extensiones o devuelve una versión antigua.
+        # Esto no modifica las transacciones firmadas ni las condiciones de pago.
+        payload.extensions = {**(payload.extensions or {}), **deepcopy(BAZAAR_EXTENSIONS)}
 
         verification = self.facilitator.verify(payload, requirement)
         if not verification.is_valid:
