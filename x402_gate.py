@@ -34,7 +34,7 @@ from x402.schemas import PaymentPayload, PaymentRequired, PaymentRequirements, R
 # declara por separado en requirement().extra.tag.
 BAZAAR_EXTENSIONS = declare_discovery_extension(input={}, input_schema={'type': 'object', 'properties': {}})
 BAZAAR_EXTENSIONS['bazaar']['info']['input']['method'] = 'GET'
-BAZAAR_EXTENSIONS['bazaar']['schema']['properties']['input']['properties']['method'] = {'type': 'string', 'const': 'GET'}
+BAZAAR_EXTENSIONS['bazaar']['schema']['properties']['input']['properties']['method'] = {'type': 'string', 'enum': ['GET']}
 BAZAAR_EXTENSIONS['bazaar']['schema']['properties']['input']['required'].append('method')
 BAZAAR_EXTENSIONS['bazaar']['info'].update({
     'name': 'ChepeastSwap',
