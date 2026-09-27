@@ -2,16 +2,35 @@
 consulta vía x402 en Algorand (facilitator.goplausible.xyz).
 """
 import httpx
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from lifi_client import get_best_route, summarize_route
-from x402_gate import PaymentGate, SwapConfig
+from x402_gate import PaymentGate, SwapConfig, b64
 
 app = FastAPI()
+
+
+@app.middleware('http')
+async def advertise_payment_before_validation(request: Request, call_next):
+    # Doctor y Bazaar consultan la ruta sin parámetros. Publicar primero el
+    # 402 permite leer GET y x402-merchant sin cobrar ni llamar a LI.FI.
+    # Con firma, FastAPI sigue validando los parámetros antes de liquidar.
+    if (request.method == 'GET' and request.url.path == '/execute'
+            and not request.headers.get('PAYMENT-SIGNATURE')):
+        challenge = gate.quote('/execute')
+        return JSONResponse(
+            challenge.model_dump(by_alias=True, exclude_none=True),
+            status_code=402,
+            headers={'PAYMENT-REQUIRED': b64(challenge)},
+        )
+    return await call_next(request)
+
+
+# CORS envuelve también la respuesta 402 del middleware anterior.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['*'],
