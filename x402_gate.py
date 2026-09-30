@@ -43,12 +43,18 @@ BAZAAR_EXTENSIONS['bazaar']['info'].update({
 })
 # Identidad explícita del comercio: no depende del HTML del dominio de la API.
 BAZAAR_EXTENSIONS['x402-merchant'] = {
-    'info': {'name': 'ChepeastSwap'},
+    'info': {
+        'name': 'ChepeastSwap',
+        'website': 'https://easy-swap.onrender.com/',
+    },
     'schema': {
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
         'type': 'object',
         'required': ['name'],
-        'properties': {'name': {'type': 'string'}},
+        'properties': {
+            'name': {'type': 'string'},
+            'website': {'type': 'string', 'format': 'uri'},
+        },
     },
 }
 
@@ -293,3 +299,4 @@ class PaymentGate:
             'customer_network_fee_microalgo': decoded[payload['paymentIndex']].fee,
             'expires_at': int(time.time()) + 180,
         }
+
