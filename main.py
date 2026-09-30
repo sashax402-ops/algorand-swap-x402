@@ -5,7 +5,7 @@ import httpx
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from lifi_client import get_best_route, summarize_route
@@ -22,12 +22,23 @@ async def advertise_payment_before_validation(request: Request, call_next):
     if (request.method == 'GET' and request.url.path == '/execute'
             and not request.headers.get('PAYMENT-SIGNATURE')):
         challenge = gate.quote('/execute')
-        return JSONResponse(
+        response = JSONResponse(
             challenge.model_dump(by_alias=True, exclude_none=True),
             status_code=402,
             headers={'PAYMENT-REQUIRED': b64(challenge)},
         )
-    return await call_next(request)
+    else:
+        response = await call_next(request)
+    # CORSMiddleware solo añade sus cabeceras si la petición incluye Origin.
+    # Doctor también consulta sin Origin: anuncia los headers en ambos casos.
+    exposed = [h.strip() for h in response.headers.get(
+        'Access-Control-Expose-Headers', ''
+    ).split(',') if h.strip()]
+    for header in ('PAYMENT-REQUIRED', 'PAYMENT-RESPONSE'):
+        if header.lower() not in {h.lower() for h in exposed}:
+            exposed.append(header)
+    response.headers['Access-Control-Expose-Headers'] = ', '.join(exposed)
+    return response
 
 
 # CORS envuelve también la respuesta 402 del middleware anterior.
@@ -40,6 +51,26 @@ app.add_middleware(
 )
 cfg = SwapConfig()
 gate = PaymentGate(cfg)
+
+
+# Logo público del comercio: SVG autónomo, sin scripts ni recursos externos.
+MERCHANT_LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"
+viewBox="0 0 128 128" role="img" aria-labelledby="title">
+<title id="title">ChepeastSwap</title>
+<rect x="2" y="2" width="124" height="124" rx="28" fill="#0b1018"
+stroke="#00d4b4" stroke-width="4"/>
+<g fill="none" stroke="#00d4b4" stroke-width="9" stroke-linecap="round"
+stroke-linejoin="round">
+<path d="M31 47h66M80 30l17 17-17 17"/>
+<path d="M97 81H31m17-17L31 81l17 17"/>
+</g>
+</svg>"""
+
+
+@app.get('/merchant-logo.svg', include_in_schema=False)
+async def merchant_logo():
+    return Response(MERCHANT_LOGO_SVG, media_type='image/svg+xml',
+                    headers={'Cache-Control': 'public, max-age=86400'})
 
 
 class PrepareRequest(BaseModel):
@@ -144,3 +175,4 @@ async def execute(
 
     raw_quote = await fetch_route(from_chain, from_token, to_chain, to_token, from_amount, from_address, to_address)
     return JSONResponse(summarize_route(raw_quote), headers=headers)
+

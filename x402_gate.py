@@ -46,6 +46,8 @@ BAZAAR_EXTENSIONS['x402-merchant'] = {
     'info': {
         'name': 'ChepeastSwap',
         'website': 'https://easy-swap.onrender.com/',
+        'logo': os.environ.get('SERVICE_URL', 'https://algorand-swap-x402.onrender.com').rstrip('/') + '/merchant-logo.svg',
+        'categories': ['defi', 'swap'],
     },
     'schema': {
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
@@ -54,6 +56,8 @@ BAZAAR_EXTENSIONS['x402-merchant'] = {
         'properties': {
             'name': {'type': 'string'},
             'website': {'type': 'string', 'format': 'uri'},
+            'logo': {'type': 'string', 'format': 'uri'},
+            'categories': {'type': 'array', 'items': {'type': 'string'}, 'minItems': 1},
         },
     },
 }
@@ -299,4 +303,5 @@ class PaymentGate:
             'customer_network_fee_microalgo': decoded[payload['paymentIndex']].fee,
             'expires_at': int(time.time()) + 180,
         }
+
 
