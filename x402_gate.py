@@ -26,13 +26,47 @@ from x402.mechanisms.avm.constants import (
     USDC_MAINNET_ASA_ID,
     USDC_TESTNET_ASA_ID,
 )
-from x402.extensions.bazaar import declare_discovery_extension
+from x402.extensions.bazaar import declare_discovery_extension, OutputConfig
 from x402.mechanisms.avm.exact import ExactAvmScheme
 from x402.schemas import PaymentPayload, PaymentRequired, PaymentRequirements, ResourceInfo
 
 # Metadatos de descubrimiento para Bazaar. La atribución al concurso se
 # declara por separado en requirement().extra.tag.
-BAZAAR_EXTENSIONS = declare_discovery_extension(input={}, input_schema={'type': 'object', 'properties': {}})
+# Parámetros de GET /execute: mismo ejemplo y descripciones que el README.
+INPUT_EXAMPLE = {
+    'from_chain': '1',
+    'from_token': 'USDC',
+    'to_chain': '8453',
+    'to_token': 'USDC',
+    'from_amount': '100000000',
+    'from_address': 'YOUR_EVM_WALLET_ADDRESS',
+}
+INPUT_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'from_chain': {'type': 'string', 'description': 'Source chain identifier accepted by LI.FI.'},
+        'from_token': {'type': 'string', 'description': 'Source token symbol or address accepted by LI.FI.'},
+        'to_chain': {'type': 'string', 'description': 'Destination chain identifier.'},
+        'to_token': {'type': 'string', 'description': 'Destination token symbol or address.'},
+        'from_amount': {'type': 'string', 'description': "Integer amount in the token's smallest unit, supplied as a string."},
+        'from_address': {'type': 'string', 'description': 'Actual source-chain wallet address.'},
+        'to_address': {'type': 'string', 'description': 'Destination wallet; defaults to from_address.'},
+    },
+    'required': ['from_chain', 'from_token', 'to_chain', 'to_token', 'from_amount', 'from_address'],
+}
+# Ejemplo de respuesta de GET /execute (mismas claves que summarize_route).
+OUTPUT_EXAMPLE = {
+    'provider': 'Across',
+    'to_amount': '99850000',
+    'to_amount_usd': '99.85',
+    'estimated_gas_costs_usd': 0.42,
+    'estimated_duration_seconds': 30,
+    'approval_address': '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE',
+    'transaction_request': {'to': '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE',
+                            'data': '0x...', 'value': '0x0', 'chainId': 1},
+}
+BAZAAR_EXTENSIONS = declare_discovery_extension(input=INPUT_EXAMPLE, input_schema=INPUT_SCHEMA,
+                                                output=OutputConfig(example=OUTPUT_EXAMPLE))
 BAZAAR_EXTENSIONS['bazaar']['info']['input']['method'] = 'GET'
 BAZAAR_EXTENSIONS['bazaar']['schema']['properties']['input']['properties']['method'] = {'type': 'string', 'enum': ['GET']}
 BAZAAR_EXTENSIONS['bazaar']['schema']['properties']['input']['required'].append('method')
